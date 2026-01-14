@@ -27,7 +27,6 @@ git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelv
 
 - 上述命令使用了[加速前缀](https://gh-proxy.org/)，如失效可更换其他[可用链接](https://ghproxy.link/)。
 - 可通过 `.env` 文件或脚本参数自定义安装选项。
-- 没有订阅？[click me](https://次元.net/auth/register?code=oUbI)
 
 ## ⌨️ 命令一览
 
@@ -168,32 +167,52 @@ bash uninstall.sh
 
 ## 📖 常见问题
 
-👉 [Wiki · FAQ](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ)
 
-## 🔗 引用
+[项目地址](https://github.com/nelvko/clash-for-linux-install)：
+👉 https://github.com/nelvko/clash-for-linux-install
+# 一、问题背景
+`clash-for-linux-install `是一个非常方便的一键脚本项目，可以在 Linux 服务器上快速部署 Clash，并提供 Web UI（如 yacd）进行节点切换与管理。
 
-- [clash](https://clash.wiki/)
-- [mihomo](https://github.com/MetaCubeX/mihomo)
-- [subconverter](https://github.com/tindy2013/subconverter)
-- [yq](https://github.com/mikefarah/yq)
-- [zashboard](https://github.com/Zephyruso/zashboard)
+但在实际使用过程中，这个项目有一个容易卡住新用户的地方：
 
-## ⭐ Star History
+>安装过程中需要输入一个「订阅链接」
+且这个订阅链接的要求是：
+👉 通过 HTTP GET 请求直接返回 Clash 可用的 YAML 配置文件
 
-<a href="https://www.star-history.com/#nelvko/clash-for-linux-install&Date">
+而问题在于：
 
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nelvko/clash-for-linux-install&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nelvko/clash-for-linux-install&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nelvko/clash-for-linux-install&type=Date" />
- </picture>
-</a>
+ - 大多数机场提供的订阅链接是 token 形式的通用订阅
+ - 该链接返回的内容通常是 base64 编码的 vmess / ss / trojan 信息
+ - 并不是 Clash 原生可直接使用的 YAML
 
-## 🙏 Thanks
+因此，直接把机场订阅链接填入脚本时，往往会提示 订阅无效。
+# 二、解决思路概述
+核心思路只有一句话：
+把机场订阅“预先转换”为 Clash YAML，然后再“伪装成一个订阅链接”提供给脚本使用
+整体流程如下：
 
-[@鑫哥](https://github.com/TrackRay)
+ 1. 在本地电脑使用 Clash for Windows 将机场订阅转换为 YAML 
+ 2. 将生成的 config.yaml 上传到服务器
+ 3. 在服务器上通过 Python HTTP 服务，把 config.yaml 暴露成一个本地订阅链接 
+ 4. 在clash-for-linux-install 安装过程中，输入这个“本地订阅链接”
 
-## ⚠️ 特别声明
+这样可以 完全绕开订阅格式不兼容的问题，同时也不依赖外部转换服务。
 
-1. 编写本项目主要目的为学习和研究 `Shell` 编程，不得将本项目中任何内容用于违反国家/地区/组织等的法律法规或相关规定的其他用途。
-2. 本项目保留随时对免责声明进行补充或更改的权利，直接或间接使用本项目内容的个人或组织，视为接受本项目的特别声明。
+# 三、具体操作步骤
+
+创建一个文件夹clash_cfg,放我的config.yaml
+接着用服务器 HTTP 服务把 config.yaml 伪装成订阅链接
+```bash
+python3 -m http.server 18080 --bind 127.0.0.1
+```
+接着新开一个shell，一键安装项目
+```bash
+git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelvko/clash-for-linux-install.git \
+  && cd clash-for-linux-install \
+  && bash install.sh
+```
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/983a758efd0c43fbb4c6c63b6f1a0e0f.png)
+然后就可以去web端，`http://ip:9090/ui/` 选择节点了，
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/8120fbf538e047388a3741bf392760ae.png)
+
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/966a32229447462c9e0224224e578798.png)
