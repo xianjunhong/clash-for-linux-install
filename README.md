@@ -220,7 +220,9 @@ git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelv
 然后就可以去web端，`http://ip:9090/ui/` 选择节点了，
 ![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/8120fbf538e047388a3741bf392760ae.png)
 
-![在这里插入图片描述](https://iblog.csdnimg.cn/direct/966a32229447462c9e0224224e578798.png)
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/966a32229447462c9e0224224e578798.png)
+
+
 
 # docker配置代理
 1）给 Docker 服务创建代理配置
@@ -239,6 +241,7 @@ Environment="NO_PROXY=localhost,127.0.0.1,::1"
 ---
 
 2）重载并重启 Docker
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart docker
