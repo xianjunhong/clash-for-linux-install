@@ -171,7 +171,69 @@ bash uninstall.sh
 [项目地址](https://github.com/nelvko/clash-for-linux-install)：
 👉 https://github.com/nelvko/clash-for-linux-install
 
-## 自建节点接入：xiancn.top（2026-10-15 更新）
+## 方法一：Windows YAML + 本地 HTTP 订阅（保留原方法）
+
+以下保留原来的操作步骤和截图。该方法仍可使用，但安装、更新订阅时，提供 YAML 的 Python HTTP 服务必须正在运行；服务停止后已导入的配置副本仍可使用。
+
+原文中“必须通过 HTTP GET 返回 YAML”描述的是当时采用的导入方式，并非所有版本和所有场景的限制。当前安装脚本也支持 `file:///`，并会尝试转换部分通用订阅；详见后面的“方法二”。
+
+### 一、问题背景
+
+`clash-for-linux-install `是一个非常方便的一键脚本项目，可以在 Linux 服务器上快速部署 Clash，并提供 Web UI（如 yacd）进行节点切换与管理。
+
+但在实际使用过程中，这个项目有一个容易卡住新用户的地方：
+
+>安装过程中需要输入一个「订阅链接」
+且这个订阅链接的要求是：
+👉 通过 HTTP GET 请求直接返回 Clash 可用的 YAML 配置文件
+
+而问题在于：
+
+ - 大多数机场提供的订阅链接是 token 形式的通用订阅
+ - 该链接返回的内容通常是 base64 编码的 vmess / ss / trojan 信息
+ - 并不是 Clash 原生可直接使用的 YAML
+
+因此，直接把机场订阅链接填入脚本时，往往会提示 订阅无效。
+
+### 二、解决思路概述
+
+核心思路只有一句话：
+把机场订阅“预先转换”为 Clash YAML，然后再“伪装成一个订阅链接”提供给脚本使用
+整体流程如下：
+
+ 1. 在本地电脑使用 Clash for Windows 将机场订阅转换为 YAML
+ 2. 将生成的 config.yaml 上传到服务器
+ 3. 在服务器上通过 Python HTTP 服务，把 config.yaml 暴露成一个本地订阅链接
+ 4. 在clash-for-linux-install 安装过程中，输入这个“本地订阅链接”
+
+这样可以 完全绕开订阅格式不兼容的问题，同时也不依赖外部转换服务。
+
+### 三、具体操作步骤
+
+创建一个文件夹clash_cfg,放我的config.yaml
+接着用服务器 HTTP 服务把 config.yaml 伪装成订阅链接
+
+```bash
+python3 -m http.server 18080 --bind 127.0.0.1
+```
+
+接着新开一个shell，一键安装项目
+
+```bash
+git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelvko/clash-for-linux-install.git \
+  && cd clash-for-linux-install \
+  && bash install.sh
+```
+---
+#### 然后填入订阅地址：http://127.0.0.1:18080/config.yaml
+
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/983a758efd0c43fbb4c6c63b6f1a0e0f.png)
+然后就可以去web端，`http://ip:9090/ui/` 选择节点了，
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/8120fbf538e047388a3741bf392760ae.png)
+
+![在这里插入图片描述](https://i-blog.csdnimg.cn/direct/966a32229447462c9e0224224e578798.png)
+
+## 方法二：xiancn.top 本地 YAML 订阅（2026-10-15 更新）
 
 以下记录适用于当前服务器安装的 `clash-for-linux-install` / `clashsub` 版本。上游项目已更名为 `clashctl`，新版命令参数可能不同；操作时以本机 `clashsub -h` 为准。
 
@@ -218,7 +280,31 @@ Mihomo 的 `proxy-providers` 还支持 YAML、URI 列表和 Base64 格式的节�
 
 ### 添加并启用本地配置
 
-本次已经将服务器上验证可用的完整配置保存到 `/root/clashctl/resources/local/xiancn.yaml`，保留了原有节点与分流设置。该文件含节点 UUID，不提交到 Git 仓库。
+本次已经将服务器上验证可用的完整配置保存到 `/root/clashctl/resources/local/xiancn.yaml`，保留了原有节点与分流设置。项目中的 [examples/xiancn.example.yaml](examples/xiancn.example.yaml) 是这份源文件的脱敏副本；UUID 已替换成全零占位符，节点名称统一为 `My-CDN-Node`。完整的分组、分流规则和规则来源均保留。
+
+示例文件包括：
+
+- `proxies`：连接 `xiancn.top:443` 的 VLESS 节点，TLS SNI 和 WebSocket Host 均为 `xiancn.top`，路径为 `/blog`。
+- `proxy-groups`：35 个策略组，用于手动选择、自动选择及各类服务分流。
+- `rules`：45 条源规则；经服务器 Mixin 合并后，运行时配置为 46 条。
+- `rule-providers`：6 组公开规则来源；首次使用或更新时需要下载。GEOSITE/GEOIP 规则还依赖安装目录中的 `geosite.dat`、`Country.mmdb`。
+
+示例保留的六个地区策略组目前都只有 `DIRECT`，选择这些组会直连。使用本次自建代理时应选择 `My-CDN-Node` 或“♻️ 自动选择”，地区组名称不代表存在额外的地区节点。
+
+源文件保留了 `allow-lan: true`、HTTP 7890、SOCKS 7891 和本地控制器 9090 等原始设置；当前服务器的 Mixin 会覆盖部分参数，例如将 `allow-lan` 设为 `false`。最终以 `runtime.yaml` 和内核实际监听为准。
+
+在另一台已经安装本项目的服务器上，可以从项目根目录复制示例，再填写真实 UUID：
+
+```bash
+install -d -m 700 /root/clashctl/resources/local
+# 仅在目标文件尚不存在时创建，避免覆盖已有配置
+if [ ! -e /root/clashctl/resources/local/xiancn.yaml ]; then
+  install -m 600 examples/xiancn.example.yaml /root/clashctl/resources/local/xiancn.yaml
+fi
+nano /root/clashctl/resources/local/xiancn.yaml
+```
+
+将 `00000000-0000-0000-0000-000000000000` 替换为 x-ui 的 `My-CDN-Node` 下对应客户端的 UUID 后，再执行下文的添加步骤。占位配置可以用于检查结构，不能直接连通节点。当前已部署服务器的真实配置已填写完成，无需用示例覆盖。真实 UUID、密码和密钥不提交到 Git 仓库。
 
 本地 `file:///` 文件不会经过订阅转换，必须已经是有效的 Clash/Mihomo YAML；不能只放一行 `vless://...` 分享链接。
 
@@ -272,11 +358,11 @@ curl --noproxy '' --proxy http://127.0.0.1:7890 --max-time 20 https://www.cloudf
 
 服务应显示 `active`。在当前分流和节点选择下，测试响应中的 `ip=` 应为 `172.96.194.29`；这里只验证经过本机代理端口的这次请求。
 
-### 原 18080 方式与回退
+### 两种方法的切换与回退
 
 之前的订阅编号 `1` 来源于 `http://127.0.0.1:18080/config.yaml`，由临时 Python HTTP 服务提供。该服务停止后，已导入的配置副本仍可使用，但更新订阅会连接失败。
 
-现在直接用 `file:///` 读取稳定的源文件，不再需要启动 Python 18080 服务。旧订阅保留，如需回到此前的配置副本，可执行：
+方法二直接用 `file:///` 读取稳定的源文件，不依赖 Python 18080 服务。方法一仍保留，恢复其 HTTP 服务后即可继续通过原地址更新。旧订阅也保留，如需回到此前的配置副本，可执行：
 
 ```bash
 clashsub use 1
